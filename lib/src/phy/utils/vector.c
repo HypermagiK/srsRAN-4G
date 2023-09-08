@@ -129,6 +129,11 @@ void srsran_vec_convert_conj_cs(const cf_t* x, const float scale, int16_t* z, co
   srsran_vec_convert_conj_cs_simd(x, z, scale, len);
 }
 
+void srsran_vec_convert_bf(const int8_t* x, const float scale, float* z, const uint32_t len)
+{
+  srsran_vec_convert_bf_simd(x, z, scale, len);
+}
+
 void srsran_vec_convert_fb(const float* x, const float scale, int8_t* z, const uint32_t len)
 {
   srsran_vec_convert_fb_simd(x, z, scale, len);

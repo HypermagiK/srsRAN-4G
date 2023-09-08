@@ -193,6 +193,7 @@ SRSRAN_API void srsran_vec_convert_fi(const float* x, const float scale, int16_t
 SRSRAN_API void srsran_vec_convert_conj_cs(const cf_t* x, const float scale, int16_t* z, const uint32_t len);
 SRSRAN_API void srsran_vec_convert_if(const int16_t* x, const float scale, float* z, const uint32_t len);
 SRSRAN_API void srsran_vec_convert_fb(const float* x, const float scale, int8_t* z, const uint32_t len);
+SRSRAN_API void srsran_vec_convert_bf(const int8_t* x, const float scale, float* z, const uint32_t len);
 
 SRSRAN_API void srsran_vec_lut_sss(const short* x, const unsigned short* lut, short* y, const uint32_t len);
 SRSRAN_API void srsran_vec_lut_bbb(const int8_t* x, const unsigned short* lut, int8_t* y, const uint32_t len);
