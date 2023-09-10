@@ -289,6 +289,9 @@ int rf_blade_open_multi(char* args, void** h, uint32_t nof_channels)
   char tuning_mode[RF_PARAM_LEN] = "host";
   parse_string(args, "tuning_mode", 0, tuning_mode);
 
+  uint32_t ref_in = 0;
+  parse_uint32(args, "ref_in", 0, &ref_in);
+
   printf("Opening bladeRF...\n");
   int status = bladerf_open(&handler->dev, device_id);
   if (status) {
@@ -325,6 +328,40 @@ int rf_blade_open_multi(char* args, void** h, uint32_t nof_channels)
     if (status) {
       ERROR("Unable to set gain mode for channel 2: %s", bladerf_strerror(status));
       goto clean_exit;
+    }
+  }
+
+  if (ref_in) {
+    printf("Enabling reference clock input...\n");
+    status = bladerf_set_pll_enable(handler->dev, true);
+    if (status) {
+      ERROR("Failed to enable reference clock input: %s", bladerf_strerror(status));
+      goto clean_exit;
+    }
+    printf("Waiting for lock...\n");
+    bool locked = false;
+    while (!locked) {
+      status = bladerf_get_pll_lock_state(handler->dev, &locked);
+      if (status) {
+        ERROR("Unable to get lock state: %s", bladerf_strerror(status));
+        goto clean_exit;
+      }
+      sleep(1);
+    }
+  } else {
+    bool enabled = false;
+    status       = bladerf_get_pll_enable(handler->dev, &enabled);
+    if (status) {
+      ERROR("Unable to get reference clock status: %s", bladerf_strerror(status));
+      goto clean_exit;
+    }
+    if (enabled) {
+      printf("Disabling reference clock input...\n");
+      status = bladerf_set_pll_enable(handler->dev, false);
+      if (status) {
+        ERROR("Failed to disable reference clock input: %s", bladerf_strerror(status));
+        goto clean_exit;
+      }
     }
   }
 
