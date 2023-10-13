@@ -33,10 +33,6 @@
 #define UNUSED __attribute__((unused))
 #define CONVERT_BUFFER_SIZE (128 * 1024 * sizeof(int16_t))
 
-const unsigned int num_buffers   = 256;
-const unsigned int num_transfers = 64;
-const unsigned int timeout_ms    = 1000;
-
 typedef struct {
   struct bladerf* dev;
 
@@ -81,23 +77,39 @@ int rf_blade_start_tx_stream(void* h)
   int                 status;
   rf_blade_handler_t* handler = (rf_blade_handler_t*)h;
 
-  const unsigned int buffer_size = 2048 + 1024 * (int)(handler->tx_rate / 1e7);
+  // Around 5 transfers per 1ms.
+  unsigned samples_per_buffer = handler->nof_tx_channels * handler->tx_rate / 1e3 / 5.f;
+  samples_per_buffer          = (samples_per_buffer + 1023) & ~1023;
+
+  const char* env_buffer_size = getenv("TX_BUFFER_SIZE");
+  if (env_buffer_size != NULL) {
+    samples_per_buffer = atoi(env_buffer_size);
+  }
+
+  unsigned nof_transfers = 16;
+
+  const char* env_nof_transfers = getenv("TX_TRANSFERS");
+  if (env_nof_transfers != NULL) {
+    nof_transfers = atoi(env_nof_transfers);
+  }
+
+  const unsigned nof_buffers = nof_transfers * 2;
 
   printf("Starting Tx stream with %u channels, %zu-bit samples at %.2f MHz and %u samples per buffer...\n",
          handler->nof_tx_channels,
          handler->sample_size * 8,
          handler->tx_rate / 1e6,
-         buffer_size);
+         samples_per_buffer);
 
   /* Configure the device's TX module for use with the sync interface.
    * SC16 Q11 or SC8 Q7 samples *with* metadata are used. */
   status = bladerf_sync_config(handler->dev,
                                handler->nof_tx_channels == 1 ? BLADERF_TX_X1 : BLADERF_TX_X2,
                                handler->format,
-                               num_buffers,
-                               buffer_size,
-                               num_transfers,
-                               timeout_ms);
+                               nof_buffers,
+                               samples_per_buffer,
+                               nof_transfers,
+                               1000);
   if (status != 0) {
     ERROR("Failed to configure TX sync interface: %s", bladerf_strerror(status));
     return status;
@@ -125,23 +137,39 @@ int rf_blade_start_rx_stream(void* h, UNUSED bool now)
   int                 status;
   rf_blade_handler_t* handler = (rf_blade_handler_t*)h;
 
-  const unsigned int buffer_size = 2048 + 1024 * (int)(handler->rx_rate / 1e7);
+  // Around 10 transfers per 1ms, for more resolution.
+  unsigned samples_per_buffer = handler->nof_tx_channels * handler->rx_rate / 1e3 / 10.f;
+  samples_per_buffer          = (samples_per_buffer + 1023) & ~1023;
+
+  const char* env_buffer_size = getenv("RX_BUFFER_SIZE");
+  if (env_buffer_size != NULL) {
+    samples_per_buffer = atoi(env_buffer_size);
+  }
+
+  unsigned nof_transfers = 16;
+
+  const char* env_nof_transfers = getenv("RX_TRANSFERS");
+  if (env_nof_transfers != NULL) {
+    nof_transfers = atoi(env_nof_transfers);
+  }
+
+  const unsigned nof_buffers = nof_transfers * 2;
 
   printf("Starting Rx stream with %u channels, %zu-bit samples at %.2f MHz and %u samples per buffer...\n",
          handler->nof_tx_channels,
          handler->sample_size * 8,
          handler->rx_rate / 1e6,
-         buffer_size);
+         samples_per_buffer);
 
   /* Configure the device's RX module for use with the sync interface.
    * SC16 Q11 or SC8 Q7 samples *with* metadata are used. */
   status = bladerf_sync_config(handler->dev,
                                handler->nof_rx_channels == 1 ? BLADERF_RX_X1 : BLADERF_RX_X2,
                                handler->format,
-                               num_buffers,
-                               buffer_size,
-                               num_transfers,
-                               timeout_ms);
+                               nof_buffers,
+                               samples_per_buffer,
+                               nof_transfers,
+                               1000);
   if (status != 0) {
     ERROR("Failed to configure RX sync interface: %s", bladerf_strerror(status));
     return status;
@@ -590,7 +618,7 @@ int rf_blade_recv_with_time_multi(void*       h,
     ERROR("RX failed: nsamples exceeds buffer size (%u > %u)", nsamples, buffer_size);
     return -1;
   }
-  status = bladerf_sync_rx(handler->dev, handler->rx_buffer, nsamples * handler->nof_rx_channels, &meta, timeout_ms);
+  status = bladerf_sync_rx(handler->dev, handler->rx_buffer, nsamples * handler->nof_rx_channels, &meta, 1000);
   if (status) {
     ERROR("RX failed: %s; nsamples=%d;", bladerf_strerror(status), nsamples);
     return -1;
@@ -706,7 +734,7 @@ int rf_blade_send_timed_multi(void*       h,
   srsran_rf_error_t error;
   bzero(&error, sizeof(srsran_rf_error_t));
 
-  status = bladerf_sync_tx(handler->dev, handler->tx_buffer, nsamples * handler->nof_tx_channels, &meta, timeout_ms);
+  status = bladerf_sync_tx(handler->dev, handler->tx_buffer, nsamples * handler->nof_tx_channels, &meta, 1000);
   if (status == BLADERF_ERR_TIME_PAST) {
     if (blade_error_handler) {
       error.type = SRSRAN_RF_ERROR_LATE;
